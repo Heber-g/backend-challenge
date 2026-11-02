@@ -83,4 +83,18 @@ export class WalletRepository {
   this.em.persist(entity);
 }
 
+async insert(wallet: Wallet): Promise<void> {
+  const entity = new WalletOrmEntity();
+
+  entity.id = wallet.id;
+  entity.playerId = wallet.playerId;
+  entity.currency = wallet.currency;
+  entity.balance = wallet.balance.toString();
+  entity.version = wallet.version;
+  entity.createdAt = wallet.createdAt;
+  entity.updatedAt = wallet.updatedAt;
+
+  this.em.persist(entity);
+}
+
 }

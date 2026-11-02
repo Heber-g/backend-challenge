@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { type EntityManager } from '@mikro-orm/postgresql';
+import { Injectable } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 
 import { WagerTransaction, WagerTransactionKind, LedgerDirection, 
 type CreateWagerTransactionProps } from '../../business-logic/entities/wager-transaction.js';
@@ -38,8 +39,11 @@ export class WalletNotFoundError extends Error {
 }
 //processando aposta, seguindo as regras de negócio, como idempotência, 
 // verificação de saldo, etc.
+@Injectable()
 export class ProcessWagerTransactionService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    private readonly em: EntityManager,
+  ) {}
 
   async execute(
     input: ProcessWagerTransactionInput,
