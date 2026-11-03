@@ -1,7 +1,18 @@
-import { IsEnum, IsIn, IsString, Matches, MaxLength, MinLength } 
-from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, 
+ValidateNested, } from 'class-validator';
+
+import { Type } from 'class-transformer';
 
 import { WagerTransactionKind } from '../../business-logic/entities/wager-transaction.js';
+
+class MoneyDto {
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  amount!: string;
+
+  @IsIn(['BRL', 'USD', 'EUR'])
+  currency!: 'BRL' | 'USD' | 'EUR';
+}
 
 export class ProcessWagerTransactionDto {
   @IsString()
@@ -22,6 +33,11 @@ export class ProcessWagerTransactionDto {
   @IsString()
   @MinLength(1)
   @MaxLength(255)
+  walletId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
   roundId!: string;
 
   @IsString()
@@ -32,11 +48,13 @@ export class ProcessWagerTransactionDto {
   @IsEnum(WagerTransactionKind)
   kind!: WagerTransactionKind;
 
-  // String para preservar a precisão monetária.
+  @IsOptional()
   @IsString()
-  @Matches(/^\d+(\.\d{1,2})?$/)
-  amount!: string;
+  @MinLength(1)
+  @MaxLength(255)
+  referenceExternalTransactionId?: string;
 
-  @IsIn(['BRL', 'USD', 'EUR'])
-  currency!: 'BRL' | 'USD' | 'EUR';
+  @ValidateNested()
+  @Type(() => MoneyDto)
+  money!: MoneyDto;
 }

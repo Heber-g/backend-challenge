@@ -41,6 +41,15 @@ export class WagerTransactionRepository {
     return entity ? this.toDomain(entity) : null;
   }
 
+  async findByReferenceTransactionId(
+  referenceTransactionId: string ): Promise<WagerTransaction | null> {
+  const entity = await this.em.findOne(WagerTransactionOrmEntity, {
+    referenceTransactionId,
+  });
+
+  return entity ? this.toDomain(entity) : null;
+}
+
   async insert(transaction: WagerTransaction): Promise<void> {
     const entity = new WagerTransactionOrmEntity();
 

@@ -1,16 +1,18 @@
 
 import { BadRequestException, Body, ConflictException, Controller, Headers, Post,
-} from '@nestjs/common';
+NotFoundException } from '@nestjs/common';
 
 import { createHash } from 'node:crypto';
 
-import { IdempotencyConflictError, ProcessWagerTransactionService } 
+import { IdempotencyConflictError, ProcessWagerTransactionService,
+DuplicateExternalTransactionError, InvalidReferenceError, DuplicateReversalError,
+WalletNotFoundError, }
 from '../../application/services/process-wager-transaction.service.js';
 
 import { Money } from '../../business-logic/value-objects/money.js';
 import { ProcessWagerTransactionDto } from '../dtos/process-wager-transaction.dto.js';
 
-@Controller('wager-transactions')
+@Controller('wagering/transactions')
 export class WagerTransactionsController {
   constructor(
     private readonly processWagerTransactionService: ProcessWagerTransactionService,
@@ -29,11 +31,16 @@ export class WagerTransactionsController {
       providerId: dto.providerId,
       externalTransactionId: dto.externalTransactionId,
       playerId: dto.playerId,
+      walletId: dto.walletId,
       roundId: dto.roundId,
       gameId: dto.gameId,
       kind: dto.kind,
-      amount: dto.amount,
-      currency: dto.currency,
+      referenceExternalTransactionId:
+        dto.referenceExternalTransactionId ?? null,
+      money: {
+        amount: dto.money.amount,
+        currency: dto.money.currency,
+      },
     };
 
     const payloadHash = createHash('sha256')
@@ -41,29 +48,48 @@ export class WagerTransactionsController {
       .digest('hex');
 
     try {
-      const transaction = await this.processWagerTransactionService.execute({
+      const result = await this.processWagerTransactionService.execute({
         providerId: dto.providerId,
         externalTransactionId: dto.externalTransactionId,
         playerId: dto.playerId,
+        walletId: dto.walletId,
         roundId: dto.roundId,
         gameId: dto.gameId,
         kind: dto.kind,
-        idempotencyKey,
+        referenceExternalTransactionId:
+          dto.referenceExternalTransactionId,
+        idempotencyKey: idempotencyKey.trim(),
         payloadHash,
-        money: Money.of(dto.amount, dto.currency),
+        money: Money.of(dto.money.amount, dto.money.currency),
       });
 
       return {
-        id: transaction.id,
-        externalTransactionId: transaction.externalTransactionId,
-        kind: transaction.kind,
-        status: transaction.status,
-        failureCode: transaction.failureCode,
-        processedAt: transaction.processedAt,
+        transactionId: result.transaction.id,
+        externalTransactionId: result.transaction.externalTransactionId,
+        status: result.transaction.status,
+        failureCode: result.transaction.failureCode,
+        processedAt: result.transaction.processedAt,
+        balance: {
+          amount: result.balance.toString(),
+          currency: result.balance.currency,
+        },
+        idempotentReplay: result.idempotentReplay,
       };
     } catch (error) {
-      if (error instanceof IdempotencyConflictError) {
+      if (
+        error instanceof IdempotencyConflictError ||
+        error instanceof DuplicateExternalTransactionError ||
+        error instanceof DuplicateReversalError
+      ) {
         throw new ConflictException(error.message);
+      }
+
+      if (error instanceof InvalidReferenceError) {
+        throw new BadRequestException(error.message);
+      }
+
+      if (error instanceof WalletNotFoundError) {
+        throw new NotFoundException(error.message);
       }
 
       throw error;

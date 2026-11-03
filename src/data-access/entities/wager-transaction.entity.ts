@@ -14,6 +14,9 @@ import { WalletOrmEntity } from './wallet.entity.js';
 @Unique({
   properties: ['providerId', 'idempotencyKey'],
 })
+@Unique({
+  properties: ['referenceTransactionId'],
+})
 export class WagerTransactionOrmEntity {
   @PrimaryKey({ type: 'string' })
   id!: string;

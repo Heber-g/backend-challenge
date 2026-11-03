@@ -51,6 +51,7 @@ export type FailureCode =
   | 'PLAYER_MISMATCH'
   | 'WALLET_MISMATCH'
   | 'REFERENCE_EXPIRED'
+  | 'REVERSAL_INSUFFICIENT_FUNDS'
   | 'INTERNAL_ERROR';
 
 export class InvalidTransactionStateError extends Error {

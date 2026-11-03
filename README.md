@@ -1,132 +1,267 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Distributed Wagering Processor
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## Visão geral
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Este projeto foi desenvolvido como solução para o desafio técnico **Distributed Wagering Processor**, proposto pela Jungle Gaming.
 
-## Description
+O objetivo do desafio se trata sobre construir uma API para processamento de transações financeiras de apostas, considerando aspectos como precisão monetária, consistência de saldo, idempotência, concorrência e rastreabilidade das movimentações.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Durante o desenvolvimento priorizei construir uma base funcional, estudar e aplicar uma stack nova e implementar as principais regras de negócio que consegui abordar dentro do tempo disponível.
 
-## Project setup
+**O desafio não foi concluído integralmente.** Algumas partes importantes da arquitetura distribuída e alguns endpoints ainda não foram implementados. Essas limitações estão descritas neste documento, para deixar claro o escopo entregue.
 
-```bash
-$ bun install
+## Tecnologias
+
+- **Bun** — runtime e gerenciamento de dependências.
+- **TypeScript** — linguagem principal.
+- **NestJS** — framework para construção da API.
+- **PostgreSQL** — banco de dados relacional.
+- **MikroORM** — mapeamento objeto-relacional e gerenciamento de migrations.
+- **Decimal.js** — operações monetárias com precisão decimal.
+- **Vitest** — execução dos testes automatizados.
+- **Docker** — execução do PostgreSQL em ambiente de desenvolvimento.
+
+## Arquitetura do projeto
+
+Foi adotada uma arquitetura em camadas, com separação de responsabilidades:
+
+```text
+src/
+├── application/
+│   └── services/
+├── business-logic/
+│   ├── entities/
+│   └── value-objects/
+├── config/
+├── data-access/
+│   ├── entities/
+│   └── repositories/
+└── presentation/
+    ├── controllers/
+    └── dtos/
 ```
 
-## Compile and run the project
+Responsabilidades principais:
 
-```bash
-# development
-$ bun run start
+- **presentation:** Receber as requisições HTTP, validar os dados de entrada e apresentar as respostas.
+- **application:** Responsável por coordenar os casos de uso e a interação entre as camadas.
+- **business-logic:** Aqui concentram-se as entidades, Value Objects e regras de negócio.
+- **data-access:** Contém as entidades de persistência e os repositórios responsáveis pelo acesso ao banco.
+- **config:** Reúne configurações da aplicação e do banco de dados.
 
-# watch mode
-$ bun run start:dev
+A estrutura busca manter as regras de negócio independentes dos detalhes de transporte HTTP e persistência. Mais detalhes estão em [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-# production mode
-$ bun run start:prod
+## Funcionalidades implementadas
+
+### Processamento de transações
+
+Foi implementado o fluxo principal de processamento de transações de apostas, contemplando os seguintes tipos:
+
+- `BET`: debita o valor da carteira.
+- `WIN`: credita o valor da premiação.
+- `LOSS`: registra o resultado sem movimentar o saldo.
+- `REFUND`: devolve o valor de uma aposta processada.
+- `ROLLBACK`: realiza a operação inversa de uma transação elegível.
+- `OPENING`: representa a movimentação inicial de abertura da carteira.
+
+Também foram implementados estados para representar o processamento, como `PENDING`, `PENDING_REFERENCE`, `PROCESSED`, `REJECTED` e `FAILED`.
+
+### Precisão monetária
+
+Foi criado o Value Object `Money`, utilizando `Decimal.js` para evitar problemas de precisão associados a operações com ponto flutuante, e seguir os requisitos do desafio proposto.
+
+O objeto encapsula o valor e a moeda, com validações para:
+
+- Valores negativos.
+- Mais de duas casas decimais.
+- Notação científica.
+- Moedas não suportadas.
+
+A representação monetária é mantida como string, evitando utilizar `number` como representação de valores financeiros nas regras de negócio.
+
+### Carteiras e saldo
+
+A entidade `Wallet` concentra as operações de débito e crédito e protege as invariantes do saldo.
+
+O processamento utiliza bloqueio pessimista de escrita (`PESSIMISTIC_WRITE`) ao buscar a carteira para movimentação, buscando evitar que operações concorrentes atualizem o mesmo saldo de maneira inconsistente.
+
+### Ledger
+
+Foi implementada a entidade `WalletLedgerEntry` para registrar as movimentações financeiras associadas às transações.
+
+As operações que alteram o saldo são persistidas junto com a transação e o registro do ledger, dentro de uma transação do banco de dados.
+
+A operação `LOSS`, por não movimentar o saldo, não gera uma entrada de ledger.
+
+### Idempotência
+
+Foi implementado o uso do header `Idempotency-Key`.
+
+A chave e o hash do payload são persistidos no banco de dados. O comportamento implementado é o seguinte:
+
+- Mesma chave e mesmo payload: retorna o resultado da transação original, sem repetir a movimentação.
+- Mesma chave e payload diferente: retorna conflito (`409 Conflict`).
+
+A persistência no banco evita depender de cache em memória como garantia de idempotência.
+
+### Validação de referências
+
+As operações `REFUND` e `ROLLBACK` validam a transação de referência, incluindo informações como tipo da operação, jogador, provedor, carteira, moeda, rodada e valor.
+
+Quando a referência não é encontrada ou ainda não está processada, a transação pode ser registrada como `PENDING_REFERENCE`.
+
+**Limitação:** o mecanismo de reprocessamento automático dessas transações pendentes ainda não foi implementado.
+
+## API implementada
+
+O endpoint de processamento implementado é:
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/wagering/transactions` | Processa uma transação de aposta. |
+
+A requisição utiliza o header `Idempotency-Key`.
+
+Exemplo simplificado:
+
+```http
+POST /wagering/transactions
+Content-Type: application/json
+Idempotency-Key: bet-player-001-001
 ```
 
-## Run tests
-
-```bash
-# unit tests
-$ bun run test
-
-# e2e tests
-$ bun run test:e2e
-
-# test coverage
-$ bun run test:cov
+```json
+{
+  "providerId": "provider-001",
+  "playerId": "player-001",
+  "walletId": "UUID-DA-CARTEIRA",
+  "externalTransactionId": "bet-001",
+  "roundId": "round-001",
+  "kind": "BET",
+  "amount": "10.00",
+  "currency": "BRL"
+}
 ```
 
-## Deployment
+O formato acima representa um exemplo de requisição; os campos devem seguir o DTO implementado no projeto.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+A resposta apresenta informações da transação, status, eventual código de falha, saldo resultante e indicação de replay idempotente.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Outros endpoints previstos no desafio, como consulta de carteira, consulta de ledger, consulta de transações e reconciliação, não foram concluídos nesta entrega.
+
+## Persistência e migrations
+
+O PostgreSQL é utilizado como fonte de persistência dos dados.
+
+O MikroORM é responsável por mapear das entidades e gerenciar as migrations.
+
+As migrations criadas pelo projeto permitem versionar a estrutura do banco de dados e aplicar as alterações controladamente.
+
+## Testes
+
+Foram desenvolvidos testes automatizados para regras de negócio, Value Objects e serviços.
+
+No último checkpoint de execução, a suíte apresentou **112 testes passando**, distribuídos em 5 arquivos de teste. A verificação de tipos com `bunx tsc --noEmit` também havia sido executada com sucesso naquele checkpoint.
+
+Além dos testes automatizados, foram realizados testes manuais da API utilizando Postman e consultas ao PostgreSQL para verificar os resultados persistidos.
+
+Os fluxos manuais verificados incluíram:
+
+- Abertura de carteira e movimentações.
+- Débito com `BET`.
+- Crédito com `WIN`.
+- Registro de `LOSS` sem alteração do saldo.
+- Rejeição de aposta com saldo insuficiente.
+- Replay idempotente e conflito por reutilização da chave com payload diferente.
+- `REFUND` e `ROLLBACK` com referências válidas.
+- Rejeição de referências incompatíveis e tentativas de reversão duplicadas.
+- Conferência das entradas do ledger no banco de dados.
+
+Os testes manuais não substituem os testes de concorrência e integração distribuída exigidos pelo desafio, os quais, infelizmente, não foram realizados.
+
+## Configuração e execução
+
+### Pré-requisitos
+
+- Bun instalado.
+- Docker instalado e em execução.
+- PostgreSQL disponível para a aplicação.
+
+### Instalação
 
 ```bash
-$ bun install -g @nestjs/mau
-$ mau deploy
+bun install
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Variáveis de ambiente
 
-## Observability
+Configure as variáveis utilizadas em `src/config/database.config.ts` para conectar a aplicação ao PostgreSQL.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+Crie um arquivo `.env` na raiz do projeto com os valores correspondentes ao seu ambiente. Os nomes das variáveis devem seguir exatamente os utilizados na configuração do banco de dados.
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+### Migrations
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
+Criar uma migration:
 
 ```bash
-$ npx @nestjs/observe link
+bun run db:migration:create
 ```
 
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand:
+Aplicar migrations pendentes:
 
 ```bash
-$ bun install @nestjs/observe
+bun run db:migration:up
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
+Consultar o status das migrations:
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+```bash
+bun run db:migration:list
+```
 
-## Resources
+### Executar a aplicação
 
-Check out a few resources that may come in handy when working with NestJS:
+Modo de desenvolvimento:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+bun run start:dev
+```
 
-## Support
+### Executar os testes
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+bun run test
+```
 
-## Stay in touch
+Verificar os tipos TypeScript:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+bunx tsc --noEmit
+```
 
-## License
+## Limitações e funcionalidades não concluídas
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+O desafio propõe uma arquitetura distribuída mais abrangente do que a implementação alcançada. Os seguintes itens permaneceram pendentes:
+
+- Integração com SQS e ambiente local de mensageria.
+- Padrões **Transactional Outbox** e **Inbox**.
+- Consumidores de mensagens, confirmação após commit, política de retries e Dead Letter Queue (DLQ).
+- Reprocessamento automático de transações com `PENDING_REFERENCE`, incluindo backoff e expiração.
+- Endpoints de consulta de carteiras, ledger e transações.
+- Endpoint de reconciliação de saldo e ledger.
+- Endpoints de health check.
+- Observabilidade estruturada, métricas e logs específicos do processamento.
+- Testes de concorrência e execução com múltiplas instâncias/processos conforme os cenários do desafio.
+- Autenticação.
+
+A autenticação era opcional no desafio, e ela não foi implementada nesta versão.
+
+Também existem cenários de concorrência e recuperação que ainda precisam de testes de integração específicos. Com isso o uso de transações SQL e bloqueio pessimista representa uma implementação inicial de proteção de consistência, mas não pode garantir validação de todos os cenários distribuídos exigidos no desafio.
+
+## Considerações finais
+
+Com o tempo disponível em relação a meus conhecimentos atuais, não foi possível concluir todos os requisitos do desafio. Mesmo assim, procurei entregar uma implementação que fosse funcional sobre as principais regras de processamento financeiro, com atenção especial à precisão monetária, consistência do saldo, persistência, idempotência e rastreabilidade por meio do ledger.
+
+Outro objetivo importante foi estudar e aplicar tecnologias com as quais eu ainda não tinha experiência prática suficiente, especialmente Bun, NestJS e MikroORM, além de aprofundar meus conhecimentos sobre transações de banco de dados, concorrência e arquitetura de sistemas financeiros.
+
+Essa implementação representa o que consegui desenvolver e validar dentro do período disponível. As funcionalidades pendentes estão documentadas para facilitar a continuidade do trabalho e indicar os próximos passos necessários para aproximar o projeto de todos os requisitos do desafio.
